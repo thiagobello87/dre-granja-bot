@@ -1,14 +1,19 @@
 import os
 import json
+import asyncio
 from datetime import datetime
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
+from flask import Flask, request
 
 TOKEN = os.environ.get('TELEGRAM_TOKEN').strip()
 URL = "https://dre-granja-bot.onrender.com"
 PORT = int(os.environ.get('PORT', 10000))
+
+flask_app = Flask(__name__)
+ptb_app = Application.builder().token(TOKEN).build()
 
 def conectar_planilha():
     try:
@@ -84,29 +89,35 @@ async def resumo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         texto = f"""**RESUMO DRE**
 Receitas: {moeda(total_vendas)}
 Despesas: {moeda(total_despesas)}
----------------------
+
 **Lucro: {moeda(lucro)}**"""
         await update.message.reply_text(texto)
     except Exception as e:
         await update.message.reply_text(f"Erro ao gerar resumo: {str(e)}")
 
-def main():
-    # 21.6 precisa do Updater. NÃO use.updater(None)
-    application = Application.builder().token(TOKEN).build()
+ptb_app.add_handler(CommandHandler("start", start))
+ptb_app.add_handler(CommandHandler("despesa", despesa))
+ptb_app.add_handler(CommandHandler("venda", venda))
+ptb_app.add_handler(CommandHandler("resumo", resumo))
 
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("despesa", despesa))
-    application.add_handler(CommandHandler("venda", venda))
-    application.add_handler(CommandHandler("resumo", resumo))
+@flask_app.route(f'/{TOKEN}', methods=['POST'])
+async def webhook():
+    await ptb_app.process_update(Update.de_json(request.get_json(force=True), ptb_app.bot))
+    return 'ok'
 
-    print("Iniciando webhook...")
-    application.run_webhook(
-        listen="0.0.0.0",
-        port=PORT,
-        url_path=TOKEN,
-        webhook_url=f"{URL}/{TOKEN}",
-        drop_pending_updates=True
-    )
+@flask_app.route('/setwebhook', methods=['GET'])
+async def set_webhook():
+    await ptb_app.bot.set_webhook(url=f"{URL}/{TOKEN}")
+    return "Webhook setado com sucesso!"
+
+@flask_app.route('/')
+def index():
+    return 'Bot online'
+
+async def setup():
+    await ptb_app.initialize()
+    await ptb_app.start()
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(setup())
+    flask_app.run(host='0.0.0.0', port=PORT)
