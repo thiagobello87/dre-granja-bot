@@ -32,7 +32,7 @@ def conectar_planilha():
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
 
-        # >>> TROCA AQUI PELO NOME EXATO DA SUA PLANILHA <<<
+        # NOME CORRETO DA SUA PLANILHA
         nome_planilha = "DRE-Granja-Dados"
         return client.open(nome_planilha).sheet1
 
