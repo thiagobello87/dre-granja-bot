@@ -6,12 +6,10 @@ from oauth2client.service_account import ServiceAccountCredentials
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-# ===== ENV =====
 TOKEN = os.environ.get('TELEGRAM_TOKEN').strip()
 URL = "https://dre-granja-bot.onrender.com"
 PORT = int(os.environ.get('PORT', 10000))
 
-# ===== PLANILHA =====
 def conectar_planilha():
     try:
         print("Conectando na planilha...")
@@ -32,7 +30,6 @@ planilha = conectar_planilha()
 def moeda(valor):
     return f"R$ {float(valor):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
 
-# ===== COMANDOS =====
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     texto = """Salve! Bot Dre Granja no ar 🐔
 
@@ -93,10 +90,8 @@ Despesas: {moeda(total_despesas)}
     except Exception as e:
         await update.message.reply_text(f"Erro ao gerar resumo: {str(e)}")
 
-# ===== MAIN =====
 def main():
     application = Application.builder().token(TOKEN).build()
-
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("despesa", despesa))
     application.add_handler(CommandHandler("venda", venda))
