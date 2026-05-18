@@ -22,6 +22,9 @@ def conectar_planilha():
         print("Conectando na planilha...")
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         creds_json = os.environ.get('GCP_CREDS')
+        if not creds_json:
+            print("ERRO: GCP_CREDS não encontrada")
+            return None
         creds_dict = json.loads(creds_json)
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
@@ -98,7 +101,7 @@ Despesas: {moeda(total_despesas)}
     except Exception as e:
         await update.message.reply_text(f"Erro ao gerar resumo: {str(e)}")
 
-# ===== BOT COM LOOP PRÓPRIO =====
+# ===== BOT COM LOOP PRÓPRIO + FIX DE SIGNAL =====
 async def run_bot_async():
     print("1. Iniciando bot async...")
     TOKEN = os.environ.get('TELEGRAM_TOKEN').strip()
@@ -114,7 +117,11 @@ async def run_bot_async():
     application.add_handler(CommandHandler("resumo", resumo))
 
     print("5. Bot iniciando polling...")
-    await application.run_polling(drop_pending_updates=True)
+    # FIX: Desliga signal handlers pq não estamos na main thread
+    await application.run_polling(
+        drop_pending_updates=True,
+        stop_signals=None
+    )
 
 def run_bot_thread():
     # Cria loop novo só pra essa thread
