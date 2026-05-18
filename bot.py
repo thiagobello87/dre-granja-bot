@@ -62,33 +62,45 @@ async def add(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"Deu ruim ao salvar: {str(e)}")
 
-# ===== RODA O BOT =====
+# ===== RODA O BOT ANTI-FANTASMA =====
 async def run_bot():
-    print("Iniciando função run_bot...")
+    print("1. Iniciando função run_bot...")
     TOKEN = os.environ.get('TELEGRAM_TOKEN')
+    print(f"2. Token bruto: [{TOKEN}]")
 
     if not TOKEN:
-        print("ERRO FATAL: TELEGRAM_TOKEN não encontrada nas variáveis de ambiente!")
+        print("ERRO FATAL: TELEGRAM_TOKEN não encontrada!")
         return
 
-    print(f"Token encontrado, começando com: {TOKEN[:10]}...")
+    TOKEN = TOKEN.strip()
+    print(f"3. Token limpo: [{TOKEN[:10]}...] Tamanho: {len(TOKEN)}")
 
     try:
+        print("4. Criando ApplicationBuilder...")
         application = ApplicationBuilder().token(TOKEN).build()
+
+        print("5. Adicionando handlers...")
         application.add_handler(CommandHandler("start", start))
         application.add_handler(CommandHandler("add", add))
 
-        print("Bot do Telegram iniciando...")
+        print("6. Bot do Telegram iniciando...")
         await application.initialize()
+        print("7. Initialize OK")
         await application.start()
-        await application.updater.start_polling(drop_pending_updates=True)
-        print("Application started - Bot online!")
+        print("8. Start OK")
+
+        # ANTI-FANTASMA: Derruba outras instâncias
+        await application.updater.start_polling(
+            drop_pending_updates=True,
+            close_loop=False
+        )
+        print("9. Application started - Bot online!")
 
         while True:
             await asyncio.sleep(3600)
 
     except Exception as e:
-        print(f"ERRO AO INICIAR BOT: {e}")
+        print(f"ERRO AO INICIAR BOT: {type(e).__name__}: {e}")
 
 # ===== INICIA TUDO =====
 if __name__ == '__main__':
