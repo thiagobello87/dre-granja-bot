@@ -1,6 +1,5 @@
 import os
 import json
-import asyncio
 from flask import Flask
 from threading import Thread
 import gspread
@@ -62,7 +61,7 @@ async def add(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"Deu ruim ao salvar: {str(e)}")
 
-# ===== RODA O BOT - VERSÃO CORRIGIDA =====
+# ===== RODA O BOT - SEM ASYNCIO.RUN =====
 def run_bot():
     print("1. Iniciando função run_bot...")
     TOKEN = os.environ.get('TELEGRAM_TOKEN')
@@ -82,12 +81,9 @@ def run_bot():
     application.add_handler(CommandHandler("add", add))
 
     print("5. Bot iniciando polling...")
-    print("9. Application started - Bot online!")
-
-    # run_polling já gerencia o loop. Não usar asyncio.run()
-    application.run_polling(drop_pending_updates=True)
+    application.run_polling(drop_pending_updates=True) # Ele gerencia o loop sozinho
 
 # ===== INICIA TUDO =====
 if __name__ == '__main__':
     Thread(target=run_flask, daemon=True).start()
-    run_bot() # Sem asyncio.run()
+    run_bot() # SEM ASYNCIO.RUN()
