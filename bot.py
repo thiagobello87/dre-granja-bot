@@ -90,10 +90,7 @@ async def run_bot():
         print("8. Start OK")
 
         # ANTI-FANTASMA: Derruba outras instâncias
-        await application.updater.start_polling(
-            drop_pending_updates=True,
-            close_loop=False
-        )
+        await application.updater.start_polling(drop_pending_updates=True)
         print("9. Application started - Bot online!")
 
         while True:
