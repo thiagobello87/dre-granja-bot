@@ -62,8 +62,8 @@ async def add(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"Deu ruim ao salvar: {str(e)}")
 
-# ===== RODA O BOT - VERSÃO ESTÁVEL =====
-async def run_bot():
+# ===== RODA O BOT - VERSÃO CORRIGIDA =====
+def run_bot():
     print("1. Iniciando função run_bot...")
     TOKEN = os.environ.get('TELEGRAM_TOKEN')
 
@@ -74,23 +74,20 @@ async def run_bot():
     TOKEN = TOKEN.strip()
     print(f"2. Token: [{TOKEN[:10]}...] Tamanho: {len(TOKEN)}")
 
-    try:
-        print("3. Criando Application...")
-        application = ApplicationBuilder().token(TOKEN).build()
+    print("3. Criando Application...")
+    application = ApplicationBuilder().token(TOKEN).build()
 
-        print("4. Adicionando handlers...")
-        application.add_handler(CommandHandler("start", start))
-        application.add_handler(CommandHandler("add", add))
+    print("4. Adicionando handlers...")
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("add", add))
 
-        print("5. Bot iniciando polling...")
-        print("9. Application started - Bot online!")
+    print("5. Bot iniciando polling...")
+    print("9. Application started - Bot online!")
 
-        await application.run_polling(drop_pending_updates=True)
-
-    except Exception as e:
-        print(f"ERRO AO INICIAR BOT: {type(e).__name__}: {e}")
+    # run_polling já gerencia o loop. Não usar asyncio.run()
+    application.run_polling(drop_pending_updates=True)
 
 # ===== INICIA TUDO =====
 if __name__ == '__main__':
     Thread(target=run_flask, daemon=True).start()
-    asyncio.run(run_bot())
+    run_bot() # Sem asyncio.run()
