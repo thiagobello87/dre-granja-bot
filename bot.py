@@ -93,10 +93,10 @@ Despesas: {moeda(total_despesas)}
     except Exception as e:
         await update.message.reply_text(f"Erro ao gerar resumo: {str(e)}")
 
-# ===== MAIN - ESSA PARTE MATA O BUG =====
+# ===== MAIN - 21.6 PRECISA DO UPDATER =====
 def main():
-    #.updater(None) é obrigatório na 21.6 pra webhook
-    application = Application.builder().token(TOKEN).updater(None).build()
+    # 21.6: tira o.updater(None) porque run_webhook precisa dele
+    application = Application.builder().token(TOKEN).build()
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("despesa", despesa))
