@@ -1,123 +1,124 @@
 import os
 import json
-import asyncio
+import logging
 from datetime import datetime
+import asyncio
+
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
+from flask import Flask, request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
-from flask import Flask, request
 
-TOKEN = os.environ.get('TELEGRAM_TOKEN').strip()
-URL = "https://dre-granja-bot.onrender.com"
+# --- LOGGING ---
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# --- VARIÁVEIS DE AMBIENTE ---
+TELEGRAM_TOKEN = os.environ['TELEGRAM_TOKEN']
+GOOGLE_CREDS_JSON = os.environ['GOOGLE_CREDS_JSON']
 PORT = int(os.environ.get('PORT', 10000))
 
-flask_app = Flask(__name__)
-ptb_app = Application.builder().token(TOKEN).build()
-
+# --- CONEXÃO COM PLANILHA ---
 def conectar_planilha():
-    try:
-        print("Conectando na planilha...")
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds_json = os.environ.get('GCP_CREDS')
-        creds_dict = json.loads(creds_json)
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-        client = gspread.authorize(creds)
-        planilha = client.open("DRE-Granja-Dados")
-        print("Planilha conectada com sucesso!")
-        return planilha
-    except Exception as e:
-        print(f"ERRO AO CONECTAR PLANILHA: {e}")
-        return None
+    logger.info("Conectando na planilha...")
+    scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+    creds_dict = json.loads(GOOGLE_CREDS_JSON)
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+    client = gspread.authorize(creds)
+    sheet = client.open("DRE-Granja-Dados").worksheet("MOVIMENTACOES")
+    logger.info("Planilha conectada com sucesso!")
+    return sheet
 
-planilha = conectar_planilha()
+SHEET = conectar_planilha()
 
-def moeda(valor):
-    return f"R$ {float(valor):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+# --- FLASK + PTB ---
+flask_app = Flask(__name__)
+bot_app = Application.builder().token(TELEGRAM_TOKEN).build()
 
+# --- COMANDOS DO BOT ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    texto = """Salve! Bot Dre Granja no ar 🐔
-
-Comandos:
-/despesa Racao 350,50
-/venda Ovos 1200
-/resumo"""
-    await update.message.reply_text(texto)
+    await update.message.reply_text(
+        "Salve! Bot Dre Granja no ar 🐔\n\n"
+        "Comandos:\n"
+        "/despesa Racao 350,50\n"
+        "/venda Ovos 1200\n"
+        "/resumo"
+    )
 
 async def despesa(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not planilha:
-        await update.message.reply_text("Erro: Planilha não conectada.")
-        return
     try:
         item = context.args[0]
         valor = float(context.args[1].replace(',', '.'))
         data = datetime.now().strftime('%d/%m/%Y %H:%M')
-        aba = planilha.worksheet('MOVIMENTACOES')
-        aba.append_row([data, 'DESPESA', item, valor])
-        await update.message.reply_text(f"Despesa: {item} = {moeda(valor)}")
-    except IndexError:
-        await update.message.reply_text("Uso: /despesa Racao 350,50")
+        SHEET.append_row([data, item, "Despesa", valor])
+        await update.message.reply_text(f"Despesa {item} de R$ {valor:.2f} lançada!")
+    except (IndexError, ValueError):
+        await update.message.reply_text("Use: /despesa Item Valor\nEx: /despesa Racao 350,50")
     except Exception as e:
-        await update.message.reply_text(f"Erro: {str(e)}")
+        logger.error(f"Erro na despesa: {e}")
+        await update.message.reply_text("Erro ao lançar. Verifique se a planilha foi compartilhada com a conta de serviço.")
 
 async def venda(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not planilha:
-        await update.message.reply_text("Erro: Planilha não conectada.")
-        return
     try:
         item = context.args[0]
         valor = float(context.args[1].replace(',', '.'))
         data = datetime.now().strftime('%d/%m/%Y %H:%M')
-        aba = planilha.worksheet('MOVIMENTACOES')
-        aba.append_row([data, 'RECEITA', item, valor])
-        await update.message.reply_text(f"Venda: {item} = {moeda(valor)} 💰")
-    except IndexError:
-        await update.message.reply_text("Uso: /venda Ovos 1200")
+        SHEET.append_row([data, item, "Venda", valor])
+        await update.message.reply_text(f"Venda {item} de R$ {valor:.2f} lançada!")
+    except (IndexError, ValueError):
+        await update.message.reply_text("Use: /venda Item Valor\nEx: /venda Ovos 1200")
     except Exception as e:
-        await update.message.reply_text(f"Erro: {str(e)}")
+        logger.error(f"Erro na venda: {e}")
+        await update.message.reply_text("Erro ao lançar. Verifique se a planilha foi compartilhada com a conta de serviço.")
 
 async def resumo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not planilha:
-        await update.message.reply_text("Erro: Planilha não conectada.")
-        return
     try:
-        aba = planilha.worksheet('MOVIMENTACOES')
-        dados = aba.get_all_values()[1:]
-        total_vendas = sum([float(linha[3]) for linha in dados if len(linha) > 3 and linha[1] == 'RECEITA'])
-        total_despesas = sum([float(linha[3]) for linha in dados if len(linha) > 3 and linha[1] == 'DESPESA'])
-        lucro = total_vendas - total_despesas
-        texto = f"""**RESUMO DRE**
-Receitas: {moeda(total_vendas)}
-Despesas: {moeda(total_despesas)}
-
-**Lucro: {moeda(lucro)}**"""
-        await update.message.reply_text(texto)
+        dados = SHEET.get_all_records()
+        total_venda = sum([d['Valor'] for d in dados if d['Tipo'] == 'Venda'])
+        total_despesa = sum([d['Valor'] for d in dados if d['Tipo'] == 'Despesa'])
+        saldo = total_venda - total_despesa
+        await update.message.reply_text(
+            f"Resumo DRE Granja:\n\n"
+            f"Vendas: R$ {total_venda:.2f}\n"
+            f"Despesas: R$ {total_despesa:.2f}\n"
+            f"Saldo: R$ {saldo:.2f}"
+        )
     except Exception as e:
-        await update.message.reply_text(f"Erro ao gerar resumo: {str(e)}")
+        logger.error(f"Erro no resumo: {e}")
+        await update.message.reply_text("Erro ao gerar resumo.")
 
-ptb_app.add_handler(CommandHandler("start", start))
-ptb_app.add_handler(CommandHandler("despesa", despesa))
-ptb_app.add_handler(CommandHandler("venda", venda))
-ptb_app.add_handler(CommandHandler("resumo", resumo))
+# --- REGISTRA HANDLERS ---
+bot_app.add_handler(CommandHandler("start", start))
+bot_app.add_handler(CommandHandler("despesa", despesa))
+bot_app.add_handler(CommandHandler("venda", venda))
+bot_app.add_handler(CommandHandler("resumo", resumo))
 
-@flask_app.route(f'/{TOKEN}', methods=['POST'])
+# --- ROTAS FLASK ---
+@flask_app.route('/webhook', methods=['POST'])
 async def webhook():
-    await ptb_app.process_update(Update.de_json(request.get_json(force=True), ptb_app.bot))
+    if not bot_app._initialized:
+        await bot_app.initialize()
+    if not bot_app.running:
+        await bot_app.start()
+
+    update = Update.de_json(request.get_json(force=True), bot_app.bot)
+    await bot_app.process_update(update)
     return 'ok'
 
-@flask_app.route('/setwebhook', methods=['GET'])
+@flask_app.route('/setwebhook', methods=['GET', 'POST'])
 async def set_webhook():
-    await ptb_app.bot.set_webhook(url=f"{URL}/{TOKEN}")
-    return "Webhook setado com sucesso!"
+    url = f"{os.environ.get('RENDER_EXTERNAL_URL')}/webhook"
+    await bot_app.bot.set_webhook(url=url)
+    return f"Webhook setado com sucesso! URL: {url}"
 
 @flask_app.route('/')
 def index():
-    return 'Bot online'
+    return 'Bot Dre Granja no ar!'
 
-async def setup():
-    await ptb_app.initialize()
-    await ptb_app.start()
-
+# --- INICIA APP ---
 if __name__ == '__main__':
-    asyncio.run(setup())
     flask_app.run(host='0.0.0.0', port=PORT)
