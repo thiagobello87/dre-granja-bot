@@ -101,7 +101,7 @@ Despesas: {moeda(total_despesas)}
     except Exception as e:
         await update.message.reply_text(f"Erro ao gerar resumo: {str(e)}")
 
-# ===== BOT COM LOOP PRÓPRIO + FIX DE SIGNAL =====
+# ===== BOT SEM SIGNAL - MODO BRUTO =====
 async def run_bot_async():
     print("1. Iniciando bot async...")
     TOKEN = os.environ.get('TELEGRAM_TOKEN').strip()
@@ -117,14 +117,17 @@ async def run_bot_async():
     application.add_handler(CommandHandler("resumo", resumo))
 
     print("5. Bot iniciando polling...")
-    # FIX: Desliga signal handlers pq não estamos na main thread
-    await application.run_polling(
-        drop_pending_updates=True,
-        stop_signals=None
-    )
+    # FIX BRUTO: Inicializa tudo manual, sem signal
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling(drop_pending_updates=True)
+    print("6. Polling rodando. Bot online!")
+
+    # Mantém vivo pra sempre
+    while True:
+        await asyncio.sleep(3600)
 
 def run_bot_thread():
-    # Cria loop novo só pra essa thread
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.run_until_complete(run_bot_async())
