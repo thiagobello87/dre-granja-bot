@@ -91,7 +91,9 @@ Despesas: {moeda(total_despesas)}
         await update.message.reply_text(f"Erro ao gerar resumo: {str(e)}")
 
 def main():
-    application = Application.builder().token(TOKEN).build()
+    # MUDANÇA PRA 21.6:.updater(None) desliga o polling
+    application = Application.builder().token(TOKEN).updater(None).build()
+
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("despesa", despesa))
     application.add_handler(CommandHandler("venda", venda))
