@@ -1,21 +1,17 @@
 import os
 import json
-import asyncio
 import traceback
-from flask import Flask
-from threading import Thread
+from flask import Flask, request
 from datetime import datetime
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram import Update, Bot
+from telegram.ext import Application, CommandHandler, ContextTypes
 
-# ===== FLASK =====
+# ===== FLASK + BOT =====
 app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return "Bot Dre Granja online!"
+TOKEN = os.environ.get('TELEGRAM_TOKEN').strip()
+bot = Bot(token=TOKEN)
 
 # ===== PLANILHA =====
 def conectar_planilha():
@@ -102,48 +98,40 @@ Despesas: {moeda(total_despesas)}
     except Exception as e:
         await update.message.reply_text(f"Erro ao gerar resumo: {str(e)}")
 
-# ===== BOT COM LOG DE ERRO COMPLETO =====
-async def run_bot_async():
+# ===== APPLICATION =====
+application = Application.builder().token(TOKEN).build()
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CommandHandler("despesa", despesa))
+application.add_handler(CommandHandler("venda", venda))
+application.add_handler(CommandHandler("resumo", resumo))
+
+# ===== WEBHOOK ROUTES =====
+@app.route('/')
+def home():
+    return "Bot Dre Granja online!"
+
+@app.route(f'/{TOKEN}', methods=['POST'])
+async def webhook():
     try:
-        print("1. Iniciando bot async...")
-        TOKEN = os.environ.get('TELEGRAM_TOKEN').strip()
-        print(f"2. Token: [{TOKEN[:10]}...] Tamanho: {len(TOKEN)}")
-
-        print("3. Criando Application...")
-        application = ApplicationBuilder().token(TOKEN).build()
-        print("3.1 Application criada com sucesso!")
-
-        print("4. Adicionando handlers...")
-        application.add_handler(CommandHandler("start", start))
-        application.add_handler(CommandHandler("despesa", despesa))
-        application.add_handler(CommandHandler("venda", venda))
-        application.add_handler(CommandHandler("resumo", resumo))
-        print("4.1 Handlers adicionados!")
-
-        print("5. Bot iniciando polling...")
-        await application.initialize()
-        await application.start()
-        await application.updater.start_polling(drop_pending_updates=True)
-        print("6. Polling rodando. Bot online!")
-
-        while True:
-            await asyncio.sleep(3600)
-
+        update = Update.de_json(request.get_json(force=True), bot)
+        await application.process_update(update)
+        return 'ok'
     except Exception as e:
-        print(f"ERRO FATAL NO BOT: {type(e).__name__}: {e}")
+        print(f"ERRO NO WEBHOOK: {e}")
         traceback.print_exc()
+        return 'error', 500
 
-def run_bot_thread():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(run_bot_async())
+# ===== SETAR WEBHOOK AO INICIAR =====
+@app.route('/setwebhook')
+async def set_webhook():
+    try:
+        url = f"https://dre-granja-bot.onrender.com/{TOKEN}"
+        await bot.set_webhook(url)
+        return f"Webhook setado para {url}"
+    except Exception as e:
+        return f"Erro ao setar webhook: {e}"
 
-# ===== START =====
 if __name__ == '__main__':
-    print("Iniciando Thread do Bot...")
-    bot_thread = Thread(target=run_bot_thread, daemon=True)
-    bot_thread.start()
-
-    print("Iniciando Flask no principal...")
+    print("Iniciando Flask com Webhook...")
     port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port)
