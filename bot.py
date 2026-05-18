@@ -1,6 +1,7 @@
 import os
 import json
 import asyncio
+import traceback
 from flask import Flask
 from threading import Thread
 from datetime import datetime
@@ -101,31 +102,36 @@ Despesas: {moeda(total_despesas)}
     except Exception as e:
         await update.message.reply_text(f"Erro ao gerar resumo: {str(e)}")
 
-# ===== BOT SEM SIGNAL - MODO BRUTO =====
+# ===== BOT COM LOG DE ERRO COMPLETO =====
 async def run_bot_async():
-    print("1. Iniciando bot async...")
-    TOKEN = os.environ.get('TELEGRAM_TOKEN').strip()
-    print(f"2. Token: [{TOKEN[:10]}...] Tamanho: {len(TOKEN)}")
+    try:
+        print("1. Iniciando bot async...")
+        TOKEN = os.environ.get('TELEGRAM_TOKEN').strip()
+        print(f"2. Token: [{TOKEN[:10]}...] Tamanho: {len(TOKEN)}")
 
-    print("3. Criando Application...")
-    application = ApplicationBuilder().token(TOKEN).build()
+        print("3. Criando Application...")
+        application = ApplicationBuilder().token(TOKEN).build()
+        print("3.1 Application criada com sucesso!")
 
-    print("4. Adicionando handlers...")
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("despesa", despesa))
-    application.add_handler(CommandHandler("venda", venda))
-    application.add_handler(CommandHandler("resumo", resumo))
+        print("4. Adicionando handlers...")
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(CommandHandler("despesa", despesa))
+        application.add_handler(CommandHandler("venda", venda))
+        application.add_handler(CommandHandler("resumo", resumo))
+        print("4.1 Handlers adicionados!")
 
-    print("5. Bot iniciando polling...")
-    # FIX BRUTO: Inicializa tudo manual, sem signal
-    await application.initialize()
-    await application.start()
-    await application.updater.start_polling(drop_pending_updates=True)
-    print("6. Polling rodando. Bot online!")
+        print("5. Bot iniciando polling...")
+        await application.initialize()
+        await application.start()
+        await application.updater.start_polling(drop_pending_updates=True)
+        print("6. Polling rodando. Bot online!")
 
-    # Mantém vivo pra sempre
-    while True:
-        await asyncio.sleep(3600)
+        while True:
+            await asyncio.sleep(3600)
+
+    except Exception as e:
+        print(f"ERRO FATAL NO BOT: {type(e).__name__}: {e}")
+        traceback.print_exc()
 
 def run_bot_thread():
     loop = asyncio.new_event_loop()
