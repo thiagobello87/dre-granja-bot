@@ -107,22 +107,20 @@ app = Flask(__name__)
 def home():
     return "Bot Dre Granja online!"
 
+# ROTA SYNC - sem async def
 @app.post(f'/{TOKEN}')
-async def webhook() -> Response:
-    await application.update_queue.put(
-        Update.de_json(data=request.json, bot=application.bot)
-    )
+def webhook() -> Response:
+    update = Update.de_json(request.get_json(force=True), application.bot)
+    asyncio.run(application.process_update(update))
     return Response(status=200)
 
 @app.route('/setwebhook')
 def set_webhook_route():
-    async def setup_webhook():
-        try:
-            await application.bot.set_webhook(url=f'{URL}/{TOKEN}', drop_pending_updates=True)
-            return f"Webhook OK: {URL}/{TOKEN}"
-        except Exception as e:
-            return f"ERRO: {e}"
-    return asyncio.run(setup_webhook())
+    try:
+        asyncio.run(application.bot.set_webhook(url=f'{URL}/{TOKEN}', drop_pending_updates=True))
+        return f"Webhook OK: {URL}/{TOKEN}"
+    except Exception as e:
+        return f"ERRO: {e}"
 
 async def setup():
     try:
