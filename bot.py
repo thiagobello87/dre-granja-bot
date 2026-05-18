@@ -1,17 +1,16 @@
 import os
 import json
-import traceback
-from flask import Flask, request
+import asyncio
+from flask import Flask, request, Response
 from datetime import datetime
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from telegram import Update, Bot
+from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-# ===== FLASK + BOT =====
-app = Flask(__name__)
+# ===== ENV =====
 TOKEN = os.environ.get('TELEGRAM_TOKEN').strip()
-bot = Bot(token=TOKEN)
+URL = "https://dre-granja-bot.onrender.com"
 
 # ===== PLANILHA =====
 def conectar_planilha():
@@ -19,9 +18,6 @@ def conectar_planilha():
         print("Conectando na planilha...")
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         creds_json = os.environ.get('GCP_CREDS')
-        if not creds_json:
-            print("ERRO: GCP_CREDS não encontrada")
-            return None
         creds_dict = json.loads(creds_json)
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
@@ -98,40 +94,35 @@ Despesas: {moeda(total_despesas)}
     except Exception as e:
         await update.message.reply_text(f"Erro ao gerar resumo: {str(e)}")
 
-# ===== APPLICATION =====
+# ===== SETUP BOT + FLASK =====
 application = Application.builder().token(TOKEN).build()
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("despesa", despesa))
 application.add_handler(CommandHandler("venda", venda))
 application.add_handler(CommandHandler("resumo", resumo))
 
-# ===== WEBHOOK ROUTES =====
+app = Flask(__name__)
+
 @app.route('/')
 def home():
     return "Bot Dre Granja online!"
 
-@app.route(f'/{TOKEN}', methods=['POST'])
-async def webhook():
-    try:
-        update = Update.de_json(request.get_json(force=True), bot)
-        await application.process_update(update)
-        return 'ok'
-    except Exception as e:
-        print(f"ERRO NO WEBHOOK: {e}")
-        traceback.print_exc()
-        return 'error', 500
+@app.post(f'/{TOKEN}')
+async def webhook() -> Response:
+    await application.update_queue.put(
+        Update.de_json(data=request.json, bot=application.bot)
+    )
+    return Response(status=200)
 
-# ===== SETAR WEBHOOK AO INICIAR =====
-@app.route('/setwebhook')
-async def set_webhook():
-    try:
-        url = f"https://dre-granja-bot.onrender.com/{TOKEN}"
-        await bot.set_webhook(url)
-        return f"Webhook setado para {url}"
-    except Exception as e:
-        return f"Erro ao setar webhook: {e}"
+async def setup():
+    # Mata qualquer polling/webhook antigo e seta o novo
+    await application.bot.set_webhook(url=f'{URL}/{TOKEN}', drop_pending_updates=True)
+    await application.initialize()
+    await application.start()
+    print("Webhook configurado! Bot online.")
 
 if __name__ == '__main__':
-    print("Iniciando Flask com Webhook...")
+    # Roda o setup do webhook antes de subir o Flask
+    asyncio.run(setup())
     port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port)
