@@ -1,7 +1,5 @@
 import os
 import json
-import asyncio
-from flask import Flask, request, Response
 from datetime import datetime
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -11,6 +9,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 # ===== ENV =====
 TOKEN = os.environ.get('TELEGRAM_TOKEN').strip()
 URL = "https://dre-granja-bot.onrender.com"
+PORT = int(os.environ.get('PORT', 10000))
 
 # ===== PLANILHA =====
 def conectar_planilha():
@@ -94,45 +93,23 @@ Despesas: {moeda(total_despesas)}
     except Exception as e:
         await update.message.reply_text(f"Erro ao gerar resumo: {str(e)}")
 
-# ===== SETUP BOT + FLASK =====
-application = Application.builder().token(TOKEN).build()
-application.add_handler(CommandHandler("start", start))
-application.add_handler(CommandHandler("despesa", despesa))
-application.add_handler(CommandHandler("venda", venda))
-application.add_handler(CommandHandler("resumo", resumo))
+# ===== MAIN =====
+def main():
+    application = Application.builder().token(TOKEN).build()
 
-app = Flask(__name__)
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("despesa", despesa))
+    application.add_handler(CommandHandler("venda", venda))
+    application.add_handler(CommandHandler("resumo", resumo))
 
-@app.route('/')
-def home():
-    return "Bot Dre Granja online!"
-
-# ROTA SYNC - sem async def
-@app.post(f'/{TOKEN}')
-def webhook() -> Response:
-    update = Update.de_json(request.get_json(force=True), application.bot)
-    asyncio.run(application.process_update(update))
-    return Response(status=200)
-
-@app.route('/setwebhook')
-def set_webhook_route():
-    try:
-        asyncio.run(application.bot.set_webhook(url=f'{URL}/{TOKEN}', drop_pending_updates=True))
-        return f"Webhook OK: {URL}/{TOKEN}"
-    except Exception as e:
-        return f"ERRO: {e}"
-
-async def setup():
-    try:
-        await application.bot.set_webhook(url=f'{URL}/{TOKEN}', drop_pending_updates=True)
-        await application.initialize()
-        await application.start()
-        print("Webhook configurado! Bot online.")
-    except Exception as e:
-        print(f"ERRO NO SETUP: {e}")
+    print("Iniciando webhook...")
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        url_path=TOKEN,
+        webhook_url=f"{URL}/{TOKEN}",
+        drop_pending_updates=True
+    )
 
 if __name__ == '__main__':
-    print("Iniciando Flask com Webhook...")
-    asyncio.run(setup())
-    port = int(os.environ.get('PORT', 10000))
-    app.run(host='0.0.0.0', port=port)
+    main()
