@@ -6,10 +6,12 @@ from oauth2client.service_account import ServiceAccountCredentials
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
+# ===== ENV VARS =====
 TOKEN = os.environ.get('TELEGRAM_TOKEN').strip()
 URL = "https://dre-granja-bot.onrender.com"
 PORT = int(os.environ.get('PORT', 10000))
 
+# ===== PLANILHA =====
 def conectar_planilha():
     try:
         print("Conectando na planilha...")
@@ -30,6 +32,7 @@ planilha = conectar_planilha()
 def moeda(valor):
     return f"R$ {float(valor):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
 
+# ===== COMANDOS DO TELEGRAM =====
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     texto = """Salve! Bot Dre Granja no ar 🐔
 
@@ -84,14 +87,15 @@ async def resumo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         texto = f"""**RESUMO DRE**
 Receitas: {moeda(total_vendas)}
 Despesas: {moeda(total_despesas)}
-
+---------------------
 **Lucro: {moeda(lucro)}**"""
         await update.message.reply_text(texto)
     except Exception as e:
         await update.message.reply_text(f"Erro ao gerar resumo: {str(e)}")
 
+# ===== MAIN - ESSA PARTE MATA O BUG =====
 def main():
-    # MUDANÇA PRA 21.6:.updater(None) desliga o polling
+    #.updater(None) é obrigatório na 21.6 pra webhook
     application = Application.builder().token(TOKEN).updater(None).build()
 
     application.add_handler(CommandHandler("start", start))
