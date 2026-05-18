@@ -114,15 +114,27 @@ async def webhook() -> Response:
     )
     return Response(status=200)
 
+@app.route('/setwebhook')
+def set_webhook_route():
+    async def setup_webhook():
+        try:
+            await application.bot.set_webhook(url=f'{URL}/{TOKEN}', drop_pending_updates=True)
+            return f"Webhook OK: {URL}/{TOKEN}"
+        except Exception as e:
+            return f"ERRO: {e}"
+    return asyncio.run(setup_webhook())
+
 async def setup():
-    # Mata qualquer polling/webhook antigo e seta o novo
-    await application.bot.set_webhook(url=f'{URL}/{TOKEN}', drop_pending_updates=True)
-    await application.initialize()
-    await application.start()
-    print("Webhook configurado! Bot online.")
+    try:
+        await application.bot.set_webhook(url=f'{URL}/{TOKEN}', drop_pending_updates=True)
+        await application.initialize()
+        await application.start()
+        print("Webhook configurado! Bot online.")
+    except Exception as e:
+        print(f"ERRO NO SETUP: {e}")
 
 if __name__ == '__main__':
-    # Roda o setup do webhook antes de subir o Flask
+    print("Iniciando Flask com Webhook...")
     asyncio.run(setup())
     port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port)
