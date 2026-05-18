@@ -33,7 +33,7 @@ def conectar_planilha():
         client = gspread.authorize(creds)
 
         # >>> TROCA AQUI PELO NOME EXATO DA SUA PLANILHA <<<
-        nome_planilha = "Planilha Dre Granja"
+        nome_planilha = "DRE-Granja-Dados"
         return client.open(nome_planilha).sheet1
 
     except Exception as e:
