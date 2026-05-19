@@ -14,7 +14,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 TELEGRAM_TOKEN = os.environ['TELEGRAM_TOKEN']
-PORT = int(os.environ.get('PORT', 10000))
 
 flask_app = Flask(__name__)
 bot_app = Application.builder().token(TELEGRAM_TOKEN).build()
@@ -124,22 +123,26 @@ bot_app.add_handler(CommandHandler("venda", venda))
 bot_app.add_handler(CommandHandler("resumo", resumo))
 
 @flask_app.route('/webhook', methods=['POST'])
-async def webhook():
-    await bot_app.process_update(Update.de_json(request.get_json(force=True), bot_app.bot))
+def webhook():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    update = Update.de_json(request.get_json(force=True), bot_app.bot)
+    loop.run_until_complete(bot_app.process_update(update))
     return 'ok'
 
 @flask_app.route('/setwebhook', methods=['GET'])
-async def set_webhook():
+def set_webhook():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     url = f"{os.environ.get('RENDER_EXTERNAL_URL')}/webhook"
-    await bot_app.bot.set_webhook(url=url)
+    loop.run_until_complete(bot_app.bot.set_webhook(url=url))
     return f"Webhook setado: {url}"
 
 @flask_app.route('/')
 def index():
     return 'Bot no ar!'
 
-async def setup():
-    await bot_app.initialize()
-    await bot_app.start()
-
-asyncio.get_event_loop().run_until_complete(setup())
+# Setup pra gunicorn
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
+loop.run_until_complete(bot_app.initialize())
