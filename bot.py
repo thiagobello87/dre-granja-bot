@@ -1,148 +1,137 @@
 import os
 import json
-import logging
-import asyncio
-from datetime import datetime
-
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 from flask import Flask, request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+from datetime import datetime
+import asyncio
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+TOKEN = os.environ['TELEGRAM_TOKEN']
+SHEET_ID = os.environ['SHEET_ID']
+GOOGLE_CREDS = json.loads(os.environ['GOOGLE_CREDS_JSON'])
 
-TELEGRAM_TOKEN = os.environ['TELEGRAM_TOKEN']
+scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+creds = ServiceAccountCredentials.from_json_keyfile_dict(GOOGLE_CREDS, scope)
+client = gspread.authorize(creds)
+sheet = client.open_by_key(SHEET_ID)
+aba_mov = sheet.worksheet('MOVIMENTACOES')
+aba_diario = sheet.worksheet('DIARIO')
 
-flask_app = Flask(__name__)
-bot_app = Application.builder().token(TELEGRAM_TOKEN).build()
-
-def get_sheet():
-    try:
-        creds_json = os.environ['GOOGLE_CREDS_JSON'].strip()
-        creds_dict = json.loads(creds_json)
-        scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-        client = gspread.authorize(creds)
-        return client.open("DRE-Granja-Dados").worksheet("MOVIMENTACOES")
-    except Exception as e:
-        logger.error(f"ERRO PLANILHA: {e}")
-        return None
+app = Flask(__name__)
+application = Application.builder().token(TOKEN).build()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Salve! Bot Dre Granja no ar 🐔\n\n"
-        "Comandos:\n"
+        "Financeiro:\n"
         "/despesa Item Categoria Valor\n"
-        "Ex: /despesa Milho Racao 100,50\n\n"
         "/venda Item Categoria Valor\n"
-        "Ex: /venda OvosCaipira VendaOvos 200\n\n"
-        "/resumo"
+        "/resumo\n\n"
+        "Produção:\n"
+        "/producao Ovos Mort RacaoKg Receita Custos Desp [Obs]"
     )
 
 async def despesa(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    sheet = get_sheet()
-    if not sheet:
-        await update.message.reply_text("Erro: Planilha não conectada.")
-        return
     try:
-        item = context.args[0]
-        categoria = context.args[1]
-        valor = float(context.args[2].replace(',', '.'))
-        data = datetime.now().strftime('%d/%m/%Y %H:%M')
-        sheet.append_row([data, item, categoria, "Despesa", valor])
+        args = context.args
+        if len(args) < 3:
+            await update.message.reply_text("Use: /despesa Item Categoria Valor")
+            return
+        valor = float(args[-1].replace(',', '.'))
+        categoria = args[-2]
+        item = ' '.join(args[:-2])
+        linha = [datetime.now().strftime('%d/%m/%Y %H:%M:%S'), item, categoria, 'Despesa', valor]
+        aba_mov.append_row(linha)
         await update.message.reply_text(f"Despesa {item} [{categoria}] de R$ {valor:.2f} lançada!")
-    except IndexError:
-        await update.message.reply_text("Use: /despesa Item Categoria Valor\nEx: /despesa Milho Racao 100,50")
-    except ValueError:
-        await update.message.reply_text("Valor inválido. Use número: 100,50")
     except Exception as e:
-        logger.error(f"Erro despesa: {e}")
-        await update.message.reply_text(f"Deu erro: {e}")
+        await update.message.reply_text(f"Erro: {str(e)}")
 
 async def venda(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    sheet = get_sheet()
-    if not sheet:
-        await update.message.reply_text("Erro: Planilha não conectada.")
-        return
     try:
-        item = context.args[0]
-        categoria = context.args[1]
-        valor = float(context.args[2].replace(',', '.'))
-        data = datetime.now().strftime('%d/%m/%Y %H:%M')
-        sheet.append_row([data, item, categoria, "Venda", valor])
+        args = context.args
+        if len(args) < 3:
+            await update.message.reply_text("Use: /venda Item Categoria Valor")
+            return
+        valor = float(args[-1].replace(',', '.'))
+        categoria = args[-2]
+        item = ' '.join(args[:-2])
+        linha = [datetime.now().strftime('%d/%m/%Y %H:%M:%S'), item, categoria, 'Venda', valor]
+        aba_mov.append_row(linha)
         await update.message.reply_text(f"Venda {item} [{categoria}] de R$ {valor:.2f} lançada!")
-    except IndexError:
-        await update.message.reply_text("Use: /venda Item Categoria Valor\nEx: /venda OvosCaipira VendaOvos 200")
-    except ValueError:
-        await update.message.reply_text("Valor inválido. Use número: 200")
     except Exception as e:
-        logger.error(f"Erro venda: {e}")
-        await update.message.reply_text(f"Deu erro: {e}")
+        await update.message.reply_text(f"Erro: {str(e)}")
 
-async def resumo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    sheet = get_sheet()
-    if not sheet:
-        await update.message.reply_text("Erro: Planilha não conectada.")
-        return
+async def producao(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        dados = sheet.get_all_records()
-        def parse_valor(v):
-            try:
-                return float(str(v).replace(',', '.'))
-            except:
-                return 0.0
+        args = context.args
+        if len(args) < 7:
+            await update.message.reply_text(
+                "Use: /producao Ovos Mort RacaoKg Receita Custos Desp [Obs]\n"
+                "Ex: /producao 684 2 165.8 800 200 0 Coleta normal"
+            )
+            return
 
-        total_venda = sum([parse_valor(d.get('Valor', 0)) for d in dados if d.get('Tipo') == 'Venda'])
-        total_despesa = sum([parse_valor(d.get('Valor', 0)) for d in dados if d.get('Tipo') == 'Despesa'])
-        saldo = total_venda - total_despesa
+        ovos = int(args[0])
+        mortalidade = int(args[1])
+        racao_kg = float(args[2].replace(',', '.'))
+        receita = float(args[3].replace(',', '.'))
+        custos = float(args[4].replace(',', '.'))
+        despesas = float(args[5].replace(',', '.'))
+        obs = ' '.join(args[6:]) if len(args) > 6 else ''
 
-        cat_despesas = {}
-        for d in dados:
-            if d.get('Tipo') == 'Despesa':
-                cat = d.get('Categoria', 'Sem Categoria')
-                cat_despesas[cat] = cat_despesas.get(cat, 0) + parse_valor(d.get('Valor', 0))
+        nova_linha = [
+            datetime.now().strftime('%d/%m/%Y'),
+            ovos,
+            mortalidade,
+            racao_kg,
+            receita,
+            custos,
+            despesas,
+            obs
+        ]
 
-        texto_cat = "\n".join([f"{cat}: R$ {val:.2f}" for cat, val in cat_despesas.items()])
+        aba_diario.append_row(nova_linha)
 
         await update.message.reply_text(
-            f"Resumo DRE Granja:\n\n"
-            f"Vendas: R$ {total_venda:.2f}\n"
-            f"Despesas: R$ {total_despesa:.2f}\n"
-            f"Saldo: R$ {saldo:.2f}\n\n"
-            f"Despesas por Categoria:\n{texto_cat if texto_cat else 'Nenhuma'}"
+            f"Produção lançada!\n"
+            f"Ovos: {ovos} | Mort: {mortalidade}\n"
+            f"Ração: {racao_kg}kg | Receita: R$ {receita:.2f}\n"
+            f"Custos: R$ {custos:.2f} | Desp: R$ {despesas:.2f}"
         )
     except Exception as e:
-        logger.error(f"Erro no resumo: {e}")
-        await update.message.reply_text(f"Erro ao gerar resumo: {e}")
+        await update.message.reply_text(f"Erro: {str(e)}")
 
-bot_app.add_handler(CommandHandler("start", start))
-bot_app.add_handler(CommandHandler("despesa", despesa))
-bot_app.add_handler(CommandHandler("venda", venda))
-bot_app.add_handler(CommandHandler("resumo", resumo))
+async def resumo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        dados = aba_mov.get_all_records()
+        if not dados:
+            await update.message.reply_text("Nenhum lançamento ainda.")
+            return
+        total_vendas = sum(float(row['Valor']) for row in dados if row['Tipo'] == 'Venda')
+        total_despesas = sum(float(row['Valor']) for row in dados if row['Tipo'] == 'Despesa')
+        saldo = total_vendas - total_despesas
+        msg = f"Resumo Geral\nVendas: R$ {total_vendas:.2f}\nDespesas: R$ {total_despesas:.2f}\nSaldo: R$ {saldo:.2f}"
+        await update.message.reply_text(msg)
+    except Exception as e:
+        await update.message.reply_text(f"Erro: {str(e)}")
 
-@flask_app.route('/webhook', methods=['POST'])
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CommandHandler("despesa", despesa))
+application.add_handler(CommandHandler("venda", venda))
+application.add_handler(CommandHandler("producao", producao))
+application.add_handler(CommandHandler("resumo", resumo))
+
+@app.route('/webhook', methods=['POST'])
 def webhook():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    update = Update.de_json(request.get_json(force=True), bot_app.bot)
-    loop.run_until_complete(bot_app.process_update(update))
-    return 'ok'
+    update = Update.de_json(request.get_json(force=True), application.bot)
+    asyncio.run(application.process_update(update))
+    return 'ok', 200
 
-@flask_app.route('/setwebhook', methods=['GET'])
-def set_webhook():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    url = f"{os.environ.get('RENDER_EXTERNAL_URL')}/webhook"
-    loop.run_until_complete(bot_app.bot.set_webhook(url=url))
-    return f"Webhook setado: {url}"
-
-@flask_app.route('/')
+@app.route('/')
 def index():
-    return 'Bot no ar!'
+    return 'Bot Dre Granja Online', 200
 
-# Setup pra gunicorn
-loop = asyncio.new_event_loop()
-asyncio.set_event_loop(loop)
-loop.run_until_complete(bot_app.initialize())
+if __name__ == '__main__':
+    app.run(port=5000)
