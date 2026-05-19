@@ -33,12 +33,12 @@ async def producao(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Erro: {e}")
 
 def main():
-    application = Application.builder().token(TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("producao", producao))
+    app = Application.builder().token(TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("producao", producao))
 
-    # PTB já sobe o servidor webhook sozinho
-    application.run_webhook(
+    # PTB sobe o servidor e já cuida da porta
+    app.run_webhook(
         listen="0.0.0.0",
         port=int(os.environ.get("PORT", 10000)),
         url_path=TOKEN,
