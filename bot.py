@@ -22,7 +22,7 @@ application = Application.builder().token(TOKEN).build()
 def home():
     return 'Bot DRE Granja Online'
 
-@flask_app.route(f'/{TOKEN}', methods=['POST'])
+@flask_app.route('/webhook', methods=['POST'])
 async def webhook():
     await application.process_update(
         Update.de_json(request.get_json(force=True), application.bot)
@@ -43,18 +43,19 @@ async def producao(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ws = sheet.worksheet("DIARIO")
         agora = datetime.now().strftime("%d/%m/%Y %H:%M")
         ws.append_row([agora, int(ovos), int(mort), float(racao), float(receita), float(custos), float(desp), obs])
-        await update.message.reply_text(f"✅ Lançado! Ovos: {ovos}")
+        await update.message.reply_text(f"✅ Lançado! Ovos: {ovos} | Mortes: {mort}")
     except Exception as e:
         await update.message.reply_text(f"❌ Erro: {e}")
 
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("producao", producao))
 
-# Configura o webhook quando o app sobe
-async def setup():
-    await application.bot.set_webhook(url=f"{URL}/{TOKEN}")
-    await application.initialize()
-    await application.start()
-
-import asyncio
-asyncio.run(setup())
+# Configura webhook só 1 vez quando o app sobe
+@flask_app.before_first_request
+def setup_webhook():
+    import asyncio
+    async def set_it():
+        await application.initialize()
+        await application.bot.set_webhook(url=f"{URL}/webhook")
+        await application.start()
+    asyncio.run(set_it())
