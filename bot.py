@@ -32,7 +32,15 @@ def get_sheet():
         return None
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Salve! Bot Dre Granja no ar 🐔\n\n/despesa Racao 350,50\n/venda Ovos 1200\n/resumo")
+    await update.message.reply_text(
+        "Salve! Bot Dre Granja no ar 🐔\n\n"
+        "Comandos:\n"
+        "/despesa Item Categoria Valor\n"
+        "Ex: /despesa Milho Racao 100,50\n\n"
+        "/venda Item Categoria Valor\n"
+        "Ex: /venda OvosCaipira VendaOvos 200\n\n"
+        "/resumo"
+    )
 
 async def despesa(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sheet = get_sheet()
@@ -41,13 +49,14 @@ async def despesa(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     try:
         item = context.args[0]
-        valor = float(context.args[1].replace(',', '.'))
+        categoria = context.args[1]
+        valor = float(context.args[2].replace(',', '.'))
         data = datetime.now().strftime('%d/%m/%Y %H:%M')
-        sheet.append_row([data, item, "Despesa", valor])
-        await update.message.reply_text(f"Despesa {item} de R$ {valor:.2f} lançada!")
+        sheet.append_row([data, item, categoria, "Despesa", valor])
+        await update.message.reply_text(f"Despesa {item} [{categoria}] de R$ {valor:.2f} lançada!")
     except Exception as e:
         logger.error(f"Erro despesa: {e}")
-        await update.message.reply_text(f"Deu erro: {e}\nUse: /despesa Item Valor")
+        await update.message.reply_text(f"Deu erro: {e}\nUse: /despesa Item Categoria Valor")
 
 async def venda(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sheet = get_sheet()
@@ -56,13 +65,14 @@ async def venda(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     try:
         item = context.args[0]
-        valor = float(context.args[1].replace(',', '.'))
+        categoria = context.args[1]
+        valor = float(context.args[2].replace(',', '.'))
         data = datetime.now().strftime('%d/%m/%Y %H:%M')
-        sheet.append_row([data, item, "Venda", valor])
-        await update.message.reply_text(f"Venda {item} de R$ {valor:.2f} lançada!")
+        sheet.append_row([data, item, categoria, "Venda", valor])
+        await update.message.reply_text(f"Venda {item} [{categoria}] de R$ {valor:.2f} lançada!")
     except Exception as e:
         logger.error(f"Erro venda: {e}")
-        await update.message.reply_text(f"Deu erro: {e}\nUse: /venda Item Valor")
+        await update.message.reply_text(f"Deu erro: {e}\nUse: /venda Item Categoria Valor")
 
 async def resumo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sheet = get_sheet()
@@ -77,11 +87,22 @@ async def resumo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         total_venda = sum([parse_valor(d['Valor']) for d in dados if d['Tipo'] == 'Venda'])
         total_despesa = sum([parse_valor(d['Valor']) for d in dados if d['Tipo'] == 'Despesa'])
         saldo = total_venda - total_despesa
+
+        # Resumo por categoria
+        cat_despesas = {}
+        for d in dados:
+            if d['Tipo'] == 'Despesa':
+                cat = d['Categoria']
+                cat_despesas[cat] = cat_despesas.get(cat, 0) + parse_valor(d['Valor'])
+
+        texto_cat = "\n".join([f"{cat}: R$ {val:.2f}" for cat, val in cat_despesas.items()])
+
         await update.message.reply_text(
             f"Resumo DRE Granja:\n\n"
             f"Vendas: R$ {total_venda:.2f}\n"
             f"Despesas: R$ {total_despesa:.2f}\n"
-            f"Saldo: R$ {saldo:.2f}"
+            f"Saldo: R$ {saldo:.2f}\n\n"
+            f"Despesas por Categoria:\n{texto_cat if texto_cat else 'Nenhuma'}"
         )
     except Exception as e:
         logger.error(f"Erro no resumo: {e}")
