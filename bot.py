@@ -1,12 +1,10 @@
 import os
 import json
 import logging
-import asyncio # ← ADICIONEI SÓ ESSA LINHA
 from datetime import datetime
 
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from flask import Flask, request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
@@ -14,10 +12,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 TELEGRAM_TOKEN = os.environ['TELEGRAM_TOKEN']
-PORT = int(os.environ.get('PORT', 10000))
-
-flask_app = Flask(__name__)
-bot_app = Application.builder().token(TELEGRAM_TOKEN).build()
 
 def get_sheet():
     try:
@@ -28,17 +22,11 @@ def get_sheet():
         client = gspread.authorize(creds)
         return client.open("DRE-Granja-Dados").worksheet("MOVIMENTACOES")
     except Exception as e:
-        logger.error(f"ERRO AO CONECTAR PLANILHA: {e}")
+        logger.error(f"ERRO PLANILHA: {e}")
         return None
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Salve! Bot Dre Granja no ar 🐔\n\n"
-        "Comandos:\n"
-        "/despesa Racao 350,50\n"
-        "/venda Ovos 1200\n"
-        "/resumo"
-    )
+    await update.message.reply_text("Salve! Bot Dre Granja no ar 🐔\n\n/despesa Racao 350,50\n/venda Ovos 1200\n/resumo")
 
 async def despesa(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sheet = get_sheet()
@@ -46,12 +34,11 @@ async def despesa(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Erro: Planilha não conectada.")
         return
     try:
-        item = context.args[0]
-        valor = float(context.args[1].replace(',', '.'))
+        item, valor = context.args[0], float(context.args[1].replace(',', '.'))
         data = datetime.now().strftime('%d/%m/%Y %H:%M')
         sheet.append_row([data, item, "Despesa", valor])
         await update.message.reply_text(f"Despesa {item} de R$ {valor:.2f} lançada!")
-    except (IndexError, ValueError):
+    except:
         await update.message.reply_text("Use: /despesa Item Valor")
 
 async def venda(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -60,12 +47,11 @@ async def venda(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Erro: Planilha não conectada.")
         return
     try:
-        item = context.args[0]
-        valor = float(context.args[1].replace(',', '.'))
+        item, valor = context.args[0], float(context.args[1].replace(',', '.'))
         data = datetime.now().strftime('%d/%m/%Y %H:%M')
         sheet.append_row([data, item, "Venda", valor])
         await update.message.reply_text(f"Venda {item} de R$ {valor:.2f} lançada!")
-    except (IndexError, ValueError):
+    except:
         await update.message.reply_text("Use: /venda Item Valor")
 
 async def resumo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -73,43 +59,18 @@ async def resumo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not sheet:
         await update.message.reply_text("Erro: Planilha não conectada.")
         return
-    try:
-        dados = sheet.get_all_records()
-        total_venda = sum([float(d['Valor']) for d in dados if d['Tipo'] == 'Venda'])
-        total_despesa = sum([float(d['Valor']) for d in dados if d['Tipo'] == 'Despesa'])
-        saldo = total_venda - total_despesa
-        await update.message.reply_text(
-            f"Resumo DRE Granja:\n\n"
-            f"Vendas: R$ {total_venda:.2f}\n"
-            f"Despesas: R$ {total_despesa:.2f}\n"
-            f"Saldo: R$ {saldo:.2f}"
-        )
-    except Exception as e:
-        logger.error(f"Erro no resumo: {e}")
-        await update.message.reply_text("Erro ao gerar resumo.")
+    dados = sheet.get_all_records()
+    tv = sum([float(d['Valor']) for d in dados if d['Tipo'] == 'Venda'])
+    td = sum([float(d['Valor']) for d in dados if d['Tipo'] == 'Despesa'])
+    await update.message.reply_text(f"Vendas: R$ {tv:.2f}\nDespesas: R$ {td:.2f}\nSaldo: R$ {tv-td:.2f}")
 
-bot_app.add_handler(CommandHandler("start", start))
-bot_app.add_handler(CommandHandler("despesa", despesa))
-bot_app.add_handler(CommandHandler("venda", venda))
-bot_app.add_handler(CommandHandler("resumo", resumo))
+def main():
+    app = Application.builder().token(TELEGRAM_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("despesa", despesa))
+    app.add_handler(CommandHandler("venda", venda))
+    app.add_handler(CommandHandler("resumo", resumo))
+    app.run_polling()
 
-@flask_app.route('/webhook', methods=['POST'])
-async def webhook():
-    await bot_app.process_update(Update.de_json(request.get_json(force=True), bot_app.bot))
-    return 'ok'
-
-@flask_app.route('/setwebhook', methods=['GET'])
-async def set_webhook():
-    url = f"{os.environ.get('RENDER_EXTERNAL_URL')}/webhook"
-    await bot_app.bot.set_webhook(url=url)
-    return f"Webhook setado: {url}"
-
-@flask_app.route('/')
-def index():
-    return 'Bot no ar!'
-
-async def setup():
-    await bot_app.initialize()
-    await bot_app.start()
-
-asyncio.get_event_loop().run_until_complete(setup())
+if __name__ == '__main__':
+    main()
