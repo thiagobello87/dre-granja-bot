@@ -16,10 +16,7 @@ sheet = gc.open_by_key(SHEET_ID)
 
 flask_app = Flask(__name__)
 application = Application.builder().token(TOKEN).build()
-
-# Inicializa o application uma vez
-import asyncio
-asyncio.run(application.initialize())
+initialized = False
 
 @flask_app.route('/')
 def home():
@@ -27,6 +24,11 @@ def home():
 
 @flask_app.route('/webhook', methods=['POST'])
 async def webhook():
+    global initialized
+    if not initialized:
+        await application.initialize()
+        initialized = True
+
     await application.process_update(
         Update.de_json(request.get_json(force=True), application.bot)
     )
