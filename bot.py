@@ -52,11 +52,16 @@ async def despesa(update: Update, context: ContextTypes.DEFAULT_TYPE):
         categoria = context.args[1]
         valor = float(context.args[2].replace(',', '.'))
         data = datetime.now().strftime('%d/%m/%Y %H:%M')
+        # ORDEM: Data, Item, Categoria, Tipo, Valor
         sheet.append_row([data, item, categoria, "Despesa", valor])
         await update.message.reply_text(f"Despesa {item} [{categoria}] de R$ {valor:.2f} lançada!")
+    except IndexError:
+        await update.message.reply_text("Use: /despesa Item Categoria Valor\nEx: /despesa Milho Racao 100,50")
+    except ValueError:
+        await update.message.reply_text("Valor inválido. Use número: 100,50")
     except Exception as e:
         logger.error(f"Erro despesa: {e}")
-        await update.message.reply_text(f"Deu erro: {e}\nUse: /despesa Item Categoria Valor")
+        await update.message.reply_text(f"Deu erro: {e}")
 
 async def venda(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sheet = get_sheet()
@@ -68,11 +73,16 @@ async def venda(update: Update, context: ContextTypes.DEFAULT_TYPE):
         categoria = context.args[1]
         valor = float(context.args[2].replace(',', '.'))
         data = datetime.now().strftime('%d/%m/%Y %H:%M')
+        # ORDEM: Data, Item, Categoria, Tipo, Valor
         sheet.append_row([data, item, categoria, "Venda", valor])
         await update.message.reply_text(f"Venda {item} [{categoria}] de R$ {valor:.2f} lançada!")
+    except IndexError:
+        await update.message.reply_text("Use: /venda Item Categoria Valor\nEx: /venda OvosCaipira VendaOvos 200")
+    except ValueError:
+        await update.message.reply_text("Valor inválido. Use número: 200")
     except Exception as e:
         logger.error(f"Erro venda: {e}")
-        await update.message.reply_text(f"Deu erro: {e}\nUse: /venda Item Categoria Valor")
+        await update.message.reply_text(f"Deu erro: {e}")
 
 async def resumo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sheet = get_sheet()
@@ -82,18 +92,20 @@ async def resumo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         dados = sheet.get_all_records()
         def parse_valor(v):
-            return float(str(v).replace(',', '.'))
+            try:
+                return float(str(v).replace(',', '.'))
+            except:
+                return 0.0
 
-        total_venda = sum([parse_valor(d['Valor']) for d in dados if d['Tipo'] == 'Venda'])
-        total_despesa = sum([parse_valor(d['Valor']) for d in dados if d['Tipo'] == 'Despesa'])
+        total_venda = sum([parse_valor(d.get('Valor', 0)) for d in dados if d.get('Tipo') == 'Venda'])
+        total_despesa = sum([parse_valor(d.get('Valor', 0)) for d in dados if d.get('Tipo') == 'Despesa'])
         saldo = total_venda - total_despesa
 
-        # Resumo por categoria
         cat_despesas = {}
         for d in dados:
-            if d['Tipo'] == 'Despesa':
-                cat = d['Categoria']
-                cat_despesas[cat] = cat_despesas.get(cat, 0) + parse_valor(d['Valor'])
+            if d.get('Tipo') == 'Despesa':
+                cat = d.get('Categoria', 'Sem Categoria')
+                cat_despesas[cat] = cat_despesas.get(cat, 0) + parse_valor(d.get('Valor', 0))
 
         texto_cat = "\n".join([f"{cat}: R$ {val:.2f}" for cat, val in cat_despesas.items()])
 
