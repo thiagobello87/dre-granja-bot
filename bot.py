@@ -1,12 +1,10 @@
 import os
 import json
 import logging
-import asyncio
 from datetime import datetime
 
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from flask import Flask, request
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
@@ -14,10 +12,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 TELEGRAM_TOKEN = os.environ['TELEGRAM_TOKEN']
-PORT = int(os.environ.get('PORT', 10000))
-
-flask_app = Flask(__name__)
-bot_app = Application.builder().token(TELEGRAM_TOKEN).build()
 
 def get_sheet():
     try:
@@ -52,7 +46,6 @@ async def despesa(update: Update, context: ContextTypes.DEFAULT_TYPE):
         categoria = context.args[1]
         valor = float(context.args[2].replace(',', '.'))
         data = datetime.now().strftime('%d/%m/%Y %H:%M')
-        # ORDEM: Data, Item, Categoria, Tipo, Valor
         sheet.append_row([data, item, categoria, "Despesa", valor])
         await update.message.reply_text(f"Despesa {item} [{categoria}] de R$ {valor:.2f} lançada!")
     except IndexError:
@@ -73,7 +66,6 @@ async def venda(update: Update, context: ContextTypes.DEFAULT_TYPE):
         categoria = context.args[1]
         valor = float(context.args[2].replace(',', '.'))
         data = datetime.now().strftime('%d/%m/%Y %H:%M')
-        # ORDEM: Data, Item, Categoria, Tipo, Valor
         sheet.append_row([data, item, categoria, "Venda", valor])
         await update.message.reply_text(f"Venda {item} [{categoria}] de R$ {valor:.2f} lançada!")
     except IndexError:
@@ -120,28 +112,16 @@ async def resumo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Erro no resumo: {e}")
         await update.message.reply_text(f"Erro ao gerar resumo: {e}")
 
-bot_app.add_handler(CommandHandler("start", start))
-bot_app.add_handler(CommandHandler("despesa", despesa))
-bot_app.add_handler(CommandHandler("venda", venda))
-bot_app.add_handler(CommandHandler("resumo", resumo))
+def main():
+    app = Application.builder().token(TELEGRAM_TOKEN).build()
 
-@flask_app.route('/webhook', methods=['POST'])
-async def webhook():
-    await bot_app.process_update(Update.de_json(request.get_json(force=True), bot_app.bot))
-    return 'ok'
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("despesa", despesa))
+    app.add_handler(CommandHandler("venda", venda))
+    app.add_handler(CommandHandler("resumo", resumo))
 
-@flask_app.route('/setwebhook', methods=['GET'])
-async def set_webhook():
-    url = f"{os.environ.get('RENDER_EXTERNAL_URL')}/webhook"
-    await bot_app.bot.set_webhook(url=url)
-    return f"Webhook setado: {url}"
+    logger.info("Bot rodando em polling...")
+    app.run_polling()
 
-@flask_app.route('/')
-def index():
-    return 'Bot no ar!'
-
-async def setup():
-    await bot_app.initialize()
-    await bot_app.start()
-
-asyncio.get_event_loop().run_until_complete(setup())
+if __name__ == '__main__':
+    main()
