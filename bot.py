@@ -1,8 +1,7 @@
 import os
 import json
-import asyncio
 from datetime import datetime
-from flask import Flask
+from flask import Flask, request
 import gspread
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
@@ -10,6 +9,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 TOKEN = os.environ["TELEGRAM_TOKEN"]
 SHEET_ID = os.environ["SHEET_ID"]
 GSPREAD_JSON = os.environ["GSPREAD_JSON"]
+URL = os.environ["RENDER_EXTERNAL_URL"]
 
 creds = json.loads(GSPREAD_JSON)
 gc = gspread.service_account_from_dict(creds)
@@ -22,12 +22,15 @@ application = Application.builder().token(TOKEN).build()
 def home():
     return 'Bot DRE Granja Online'
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Salve! Bot Dre Granja no ar 🐔\n\n"
-        "/producao Ovos Mort RacaoKg Receita Custos Desp [Obs]\n"
-        "Ex: /producao 750 2 165 900 230 60 Ração cara"
+@flask_app.route(f'/{TOKEN}', methods=['POST'])
+async def webhook():
+    await application.process_update(
+        Update.de_json(request.get_json(force=True), application.bot)
     )
+    return 'ok'
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Salve! Bot Dre Granja no ar 🐔\n\n/producao Ovos Mort RacaoKg Receita Custos Desp [Obs]")
 
 async def producao(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -35,25 +38,23 @@ async def producao(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(args) < 7:
             await update.message.reply_text("Uso: /producao Ovos Mort RacaoKg Receita Custos Desp [Obs]")
             return
-
         ovos, mort, racao, receita, custos, desp = args[:6]
         obs = " ".join(args[6:]) if len(args) > 6 else ""
-        
         ws = sheet.worksheet("DIARIO")
         agora = datetime.now().strftime("%d/%m/%Y %H:%M")
         ws.append_row([agora, int(ovos), int(mort), float(racao), float(receita), float(custos), float(desp), obs])
-        
-        await update.message.reply_text(f"✅ Lançado! Ovos: {ovos} | Mortes: {mort}")
+        await update.message.reply_text(f"✅ Lançado! Ovos: {ovos}")
     except Exception as e:
         await update.message.reply_text(f"❌ Erro: {e}")
 
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("producao", producao))
 
-# CORREÇÃO: Cria o event loop pra thread
-def run_bot():
-    asyncio.set_event_loop(asyncio.new_event_loop())
-    application.run_polling()
+# Configura o webhook quando o app sobe
+async def setup():
+    await application.bot.set_webhook(url=f"{URL}/{TOKEN}")
+    await application.initialize()
+    await application.start()
 
-import threading
-threading.Thread(target=run_bot, daemon=True).start()
+import asyncio
+asyncio.run(setup())
