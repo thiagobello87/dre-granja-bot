@@ -1,7 +1,6 @@
 import os
 import json
 from datetime import datetime
-from flask import Flask, request
 import gspread
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
@@ -9,30 +8,11 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 TOKEN = os.environ["TELEGRAM_TOKEN"]
 SHEET_ID = os.environ["SHEET_ID"]
 GSPREAD_JSON = os.environ["GSPREAD_JSON"]
+URL = "https://dre-granja-bot.onrender.com"
 
 creds = json.loads(GSPREAD_JSON)
 gc = gspread.service_account_from_dict(creds)
 sheet = gc.open_by_key(SHEET_ID)
-
-flask_app = Flask(__name__)
-application = Application.builder().token(TOKEN).build()
-initialized = False
-
-@flask_app.route('/')
-def home():
-    return 'Bot DRE Granja Online'
-
-@flask_app.route('/webhook', methods=['POST'])
-async def webhook():
-    global initialized
-    if not initialized:
-        await application.initialize()
-        initialized = True
-
-    await application.process_update(
-        Update.de_json(request.get_json(force=True), application.bot)
-    )
-    return 'ok'
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Salve! Bot Dre Granja no ar 🐔\n\n/producao Ovos Mort RacaoKg Receita Custos Desp [Obs]")
@@ -52,5 +32,18 @@ async def producao(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"❌ Erro: {e}")
 
-application.add_handler(CommandHandler("start", start))
-application.add_handler(CommandHandler("producao", producao))
+def main():
+    application = Application.builder().token(TOKEN).build()
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("producao", producao))
+
+    # PTB já sobe o servidor webhook sozinho
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=int(os.environ.get("PORT", 10000)),
+        url_path=TOKEN,
+        webhook_url=f"{URL}/{TOKEN}"
+    )
+
+if __name__ == "__main__":
+    main()
