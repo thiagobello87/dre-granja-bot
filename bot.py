@@ -17,6 +17,10 @@ sheet = gc.open_by_key(SHEET_ID)
 flask_app = Flask(__name__)
 application = Application.builder().token(TOKEN).build()
 
+# Inicializa o application uma vez
+import asyncio
+asyncio.run(application.initialize())
+
 @flask_app.route('/')
 def home():
     return 'Bot DRE Granja Online'
