@@ -9,7 +9,6 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 TOKEN = os.environ["TELEGRAM_TOKEN"]
 SHEET_ID = os.environ["SHEET_ID"]
 GSPREAD_JSON = os.environ["GSPREAD_JSON"]
-URL = os.environ["RENDER_EXTERNAL_URL"]
 
 creds = json.loads(GSPREAD_JSON)
 gc = gspread.service_account_from_dict(creds)
@@ -49,13 +48,3 @@ async def producao(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 application.add_handler(CommandHandler("start", start))
 application.add_handler(CommandHandler("producao", producao))
-
-# Configura webhook só 1 vez quando o app sobe
-@flask_app.before_first_request
-def setup_webhook():
-    import asyncio
-    async def set_it():
-        await application.initialize()
-        await application.bot.set_webhook(url=f"{URL}/webhook")
-        await application.start()
-    asyncio.run(set_it())
